@@ -11,16 +11,17 @@ def _():
     import networkx as nx
     from pydantic import ValidationError
     from ordonnancement.data import CahierDesCharges
+    from ordonnancement.exemple import CAHIER_MAISON
     from ordonnancement.resolution import (
         a_une_solution,
         construit_graphe,
         resoud_avec_groupe_non_simultane,
         resoud_ordonnancement,
     )
-    from ordonnancement.exemple import CAHIER_MAISON, LIVRAISONS
+
     return (
+        CAHIER_MAISON,
         CahierDesCharges,
-        LIVRAISONS,
         ValidationError,
         a_une_solution,
         construit_graphe,
@@ -36,13 +37,13 @@ def _():
 @app.cell
 def _(mo):
     fichier = mo.ui.file(filetypes=[".json"])
-    groupe = mo.ui.multiselect(options=[], label="Tâches non simultanées")
-    mo.vstack([mo.md("### Fichier JSON"), fichier, groupe])
-    return fichier, groupe
+    mo.md("### Fichier JSON")
+    fichier
+    return (fichier,)
 
 
 @app.cell
-def _(CahierDesCharges, ValidationError, fichier):
+def _(CAHIER_MAISON, CahierDesCharges, ValidationError, fichier):
     try:
         contenu = fichier.value[0].contents.decode("utf-8")
         cahier = CahierDesCharges.model_validate_json(contenu)
@@ -52,11 +53,10 @@ def _(CahierDesCharges, ValidationError, fichier):
 
 
 @app.cell
-def _(cahier, groupe):
+def _(cahier, mo):
     options = [tache.nom for tache in cahier.taches]
-    groupe.options = options
-    if not groupe.value:
-        groupe.value = []
+    groupe = mo.ui.multiselect(options=options, label="Tâches non simultanées")
+    groupe
     return (groupe,)
 
 
@@ -102,40 +102,54 @@ def _(planning, pl):
 
 
 @app.cell
-def _(df, mo):
-    mo.ui.table(df)
+def _(df, mo, planning):
+    mo.vstack(
+        [
+            mo.md(f"### Durée totale : {planning.duree_totale:g} semaines"),
+            mo.ui.table(df),
+            mo.md(f"### Chemin critique : {' → '.join(planning.chemin_critique)}"),
+        ]
+    )
     return
 
 
 @app.cell
-def _(construit_graphe, nx, planning, plt):
+def _(construit_graphe, mo, nx, planning, plt):
     graphe = construit_graphe(planning.cahier_des_charges)
     pos = nx.spring_layout(graphe, seed=42)
 
     critiques = set(planning.chemin_critique)
     couleurs_noeuds = [
-        "red" if node in critiques else "lightblue" for node in graphe.nodes
+        "red" if noeud in critiques else "lightblue" for noeud in graphe.nodes
     ]
     couleurs_arretes = [
-        "red" if u in critiques and v in critiques else "gray"
-        for u, v in graphe.edges
+        "red" if depart in critiques and arrivee in critiques else "gray"
+        for depart, arrivee in graphe.edges
     ]
 
-    plt.figure()
+    figure, axe = plt.subplots()
     nx.draw(
         graphe,
         pos,
+        ax=axe,
         with_labels=True,
         node_color=couleurs_noeuds,
         edge_color=couleurs_arretes,
     )
-    plt.title("Graphe des tâches (chemin critique en rouge)")
-    plt.show()
-    return
+    axe.set_title("Graphe des tâches")
+    mo.mpl.interactive(figure)
+    return 
+
+def main() -> None:
+    """Lance l'interface graphique Marimo."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    chemin = Path(__file__).resolve()
+    commande = [sys.executable, "-m", "marimo", "run", str(chemin)]
+    subprocess.run(commande, check=True)
 
 
-@app.cell
-def _(mo, planning):
-    mo.md(f"### Durée totale : {planning.duree_totale:g} semaines")
-    mo.md(f"### Chemin critique : {' → '.join(planning.chemin_critique)}")
-    return
+if __name__ == "__main__":
+    main()

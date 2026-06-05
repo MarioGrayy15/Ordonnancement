@@ -64,3 +64,6 @@ def depuis_fichier(chemin: Path) -> None:
     cahier = CahierDesCharges.model_validate_json(contenu)
     planning = resoud_ordonnancement(cahier=cahier)
     _affiche_planning(planning=planning)
+
+if __name__ == "__main__":
+    app()
